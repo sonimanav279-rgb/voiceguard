@@ -1,10 +1,27 @@
-import { useAudioRecorder } from "./hooks/useAudioRecorder";
 import { useEffect, useState } from "react";
 import { useMicrophone } from "./hooks/useMicrophone";
+import { useAudioRecorder } from "./hooks/useAudioRecorder";
 import "./App.css";
 
+const mockRiskSequence = [0.12, 0.25, 0.43, 0.67, 0.87];
+
+function getRiskLevel(value) {
+  if (value >= 0.7) return "HIGH";
+  if (value >= 0.4) return "MEDIUM";
+  return "LOW";
+}
+
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(
+    2,
+    "0"
+  )}`;
+}
+
 function App() {
-  // Microphone
   const {
     startMicrophone,
     stopMicrophone,
@@ -12,32 +29,21 @@ function App() {
     error: micError,
   } = useMicrophone();
 
-  // App state
   const [status, setStatus] = useState("idle");
-  const [probability, setProbability] = useState(0);
-  const [riskLevel, setRiskLevel] = useState("LOW");
-  const [history, setHistory] = useState([]);
+  const [risk, setRisk] = useState(0);
+  const [riskHistory, setRiskHistory] = useState([]);
   const [sessionTime, setSessionTime] = useState(0);
+  const [callerName] = useState("Alice D.");
 
-  // Handle predictions coming from the audio recorder
-  const handlePrediction = (prediction) => {
-    console.log("📊 Updating dashboard:", prediction);
+  
 
-    setProbability(prediction.synthetic_probability);
-    setRiskLevel(prediction.risk_level);
-
-    setHistory((previous) => [
-      ...previous.slice(-7),
-      prediction.synthetic_probability,
-    ]);
-  };
-
-  // Audio recorder
   const {
     startRecording,
     stopRecording,
     isRecording,
-  } = useAudioRecorder(handlePrediction);
+  } = useAudioRecorder();
+
+  const riskLevel = getRiskLevel(risk);
 
   // Session timer
   useEffect(() => {
@@ -50,410 +56,667 @@ function App() {
     return () => clearInterval(timer);
   }, [status]);
 
-  // Start protection
-  const handleStart = async () => {
-    console.log("🎙️ Starting VoiceGuard...");
+  // Mock risk updates for the demonstration
+  useEffect(() => {
+    if (status !== "active") return;
 
+    let index = 0;
+
+    setRiskHistory([mockRiskSequence[0]]);
+    setRisk(mockRiskSequence[0]);
+
+    const timer = setInterval(() => {
+      index += 1;
+
+      const nextRisk =
+        mockRiskSequence[index % mockRiskSequence.length];
+
+      setRisk(nextRisk);
+
+      setRiskHistory((previous) => [
+        ...previous.slice(-9),
+        nextRisk,
+      ]);
+    }, 1800);
+
+    return () => clearInterval(timer);
+  }, [status]);
+
+  const handleStart = async () => {
     setStatus("starting");
 
     const stream = await startMicrophone();
 
-    if (stream) {
-      console.log("✅ Microphone stream received:", stream);
-
-      // Start recording audio
-      startRecording(stream);
-
-      // Reset dashboard
-      setProbability(0);
-      setRiskLevel("LOW");
-      setHistory([]);
-      setSessionTime(0);
-
-      // Start protection
-      setStatus("active");
-
-      console.log("🛡️ VoiceGuard protection active");
-    } else {
-      console.log("❌ Microphone permission denied");
-
+    if (!stream) {
       setStatus("permission-denied");
+      return;
     }
+
+    setRisk(0.12);
+    setRiskHistory([0.12]);
+    setSessionTime(0);
+
+    startRecording(stream);
+
+    setStatus("active");
   };
 
-  // Stop protection
   const handleStop = () => {
-    console.log("🛑 Stopping VoiceGuard...");
-
     stopRecording();
     stopMicrophone();
 
     setStatus("stopped");
   };
 
-  // Try again after microphone permission error
-  const handleTryAgain = () => {
+  const handleReset = () => {
     stopRecording();
     stopMicrophone();
 
+    setRisk(0);
+    setRiskHistory([]);
+    setSessionTime(0);
     setStatus("idle");
-  };
-
-  // Format session time
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-
-    return `${String(minutes).padStart(2, "0")}:${String(
-      remainingSeconds
-    ).padStart(2, "0")}`;
-  };
-
-  // Risk messages
-  const riskMessage = {
-    LOW: "Voice appears likely human",
-    MEDIUM: "Possible synthetic voice detected",
-    HIGH: "High synthetic voice risk detected",
   };
 
   return (
     <div className="app">
 
       {/* ================= HEADER ================= */}
-      <header className="header">
-        <div className="logo">
-          <span className="logo-icon">🛡️</span>
-          <span>VoiceGuard</span>
+
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-icon">
+            <span>✦</span>
+          </div>
+
+          <div>
+            <h1>VOICEGUARD</h1>
+            <p>AI VOICE SAFETY</p>
+          </div>
         </div>
 
-        <div className="header-status">
-          <span className="status-dot"></span>
-          Browser Prototype
-        </div>
+        {status === "active" && (
+          <div className="live-status">
+            <span className="live-dot"></span>
+            PROTECTION ACTIVE
+          </div>
+        )}
+
+        {status !== "active" && (
+          <div className="prototype-label">
+            BROWSER PROTOTYPE
+          </div>
+        )}
       </header>
 
-      <main className="main-content">
+      <div className="app-layout">
 
-        {/* ================= IDLE ================= */}
-        {status === "idle" && (
-          <section className="landing">
+        {/* ================= SIDEBAR ================= */}
 
-            <div className="hero-icon">
-              🛡️
-            </div>
+        <aside className="sidebar">
 
-            <h1>
-              Protect Yourself From
-              <span> AI Voice Scams</span>
-            </h1>
+          <button className="nav-item active" title="Dashboard">
+            <span>⌂</span>
+          </button>
 
-            <p className="hero-text">
-              VoiceGuard listens for suspicious synthetic voice
-              patterns during your phone calls.
-            </p>
+          <button className="nav-item" title="Call Monitor">
+            <span>◉</span>
+          </button>
 
-            <button
-              className="start-button"
-              onClick={handleStart}
-            >
-              🎙️ Start Protection
-            </button>
+          <button className="nav-item" title="Contacts">
+            <span>♙</span>
+          </button>
 
-            <div className="privacy-box">
-              🔒 Your audio is processed temporarily and is not
-              stored on your device.
-            </div>
+          <button className="nav-item" title="Messages">
+            <span>▢</span>
+          </button>
 
-          </section>
-        )}
+          <div className="sidebar-spacer"></div>
 
-        {/* ================= STARTING ================= */}
-        {status === "starting" && (
-          <section className="state-screen">
+          <button className="nav-item" title="Settings">
+            <span>⚙</span>
+          </button>
 
-            <div className="loading-spinner"></div>
+        </aside>
 
-            <h2>
-              Requesting Microphone Access
-            </h2>
+        {/* ================= MAIN ================= */}
 
-            <p>
-              Please allow microphone access in your browser.
-            </p>
+        <main className="dashboard">
 
-          </section>
-        )}
+          {/* IDLE */}
 
-        {/* ================= PERMISSION DENIED ================= */}
-        {status === "permission-denied" && (
-          <section className="state-screen">
+          {status === "idle" && (
+            <section className="welcome-screen">
 
-            <div className="error-icon">
-              🎙️
-            </div>
-
-            <h2>
-              Microphone Access Needed
-            </h2>
-
-            <p>
-              {micError ||
-                "VoiceGuard needs microphone access to analyze the call."}
-            </p>
-
-            <button
-              className="start-button"
-              onClick={handleTryAgain}
-            >
-              Try Again
-            </button>
-
-          </section>
-        )}
-
-        {/* ================= ACTIVE ================= */}
-        {status === "active" && (
-          <section className="dashboard">
-
-            {/* Protection header */}
-            <div className="protection-header">
-
-              <div>
-
-                <div className="active-indicator">
-                  <span className="pulse-dot"></span>
-
-                  PROTECTION ACTIVE
-                </div>
-
-                <h2>
-                  Monitoring Call
-                </h2>
-
+              <div className="welcome-badge">
+                SECURE VOICE MONITORING
               </div>
+
+              <h2>
+                Detect suspicious
+                <br />
+                <span>synthetic voices.</span>
+              </h2>
+
+              <p>
+                VoiceGuard analyzes live call audio and provides
+                a real-time synthetic voice risk signal.
+              </p>
 
               <button
-                className="stop-button"
-                onClick={handleStop}
+                className="primary-button"
+                onClick={handleStart}
               >
-                ■ Stop Protection
+                <span>◉</span>
+                Start Protection
               </button>
 
-            </div>
+              <div className="privacy-note">
+                <span>◉</span>
+                Microphone access is requested only when you
+                start protection. Audio is analyzed live and
+                not stored.
+              </div>
 
-            {/* Dashboard cards */}
-            <div className="dashboard-grid">
+            </section>
+          )}
 
-              {/* ================= PROBABILITY ================= */}
-              <div className="card probability-card">
+          {/* STARTING */}
 
-                <p className="card-label">
-                  SYNTHETIC VOICE PROBABILITY
-                </p>
+          {status === "starting" && (
+            <section className="center-state">
 
-                <div className="probability">
-                  {Math.round(probability * 100)}%
+              <div className="loading-ring"></div>
+
+              <h2>Starting Protection</h2>
+
+              <p>
+                Please allow microphone access in your browser.
+              </p>
+
+            </section>
+          )}
+
+          {/* PERMISSION DENIED */}
+
+          {status === "permission-denied" && (
+            <section className="center-state">
+
+              <div className="state-icon error">
+                !
+              </div>
+
+              <h2>Microphone Access Required</h2>
+
+              <p>
+                {micError ||
+                  "VoiceGuard needs microphone access to analyze the call."}
+              </p>
+
+              <button
+                className="primary-button"
+                onClick={handleStart}
+              >
+                Try Again
+              </button>
+
+            </section>
+          )}
+
+          {/* ================= ACTIVE DASHBOARD ================= */}
+
+          {status === "active" && (
+            <>
+              <div className="dashboard-heading">
+
+                <div>
+                  <div className="eyebrow">
+                    LIVE CALL MONITORING
+                  </div>
+
+                  <h2>Incoming Call</h2>
                 </div>
 
-                <div
-                  className={`risk-badge ${riskLevel.toLowerCase()}`}
-                >
-                  {riskLevel}
-                </div>
+                <div className="session-controls">
 
-                <p className="risk-message">
-                  {riskMessage[riskLevel]}
-                </p>
+                  <div className="session-time">
+                    <span>SESSION</span>
+                    <strong>
+                      {formatTime(sessionTime)}
+                    </strong>
+                  </div>
+
+                  <button
+                    className="stop-button"
+                    onClick={handleStop}
+                  >
+                    Stop Protection
+                  </button>
+
+                </div>
 
               </div>
 
-              {/* ================= RISK GAUGE ================= */}
-              <div className="card">
+              <div className="main-grid">
 
-                <p className="card-label">
-                  RISK LEVEL
-                </p>
+                {/* ================= CALL CARD ================= */}
 
-                <div className="gauge-container">
+                <section className="card call-card">
+
+                  <div className="card-header">
+                    <span>INCOMING CALL</span>
+                    <button className="more-button">•••</button>
+                  </div>
+
+                  <div className="caller">
+
+                    <div className="caller-avatar">
+                      AD
+                    </div>
+
+                    <div>
+                      <h3>{callerName}</h3>
+                      <p>VERIFY IDENTITY</p>
+                    </div>
+
+                  </div>
+
+                  {/* RISK GAUGE */}
 
                   <div
-                    className="gauge"
-                    style={{
-                      background: `conic-gradient(
-                        ${
-                          riskLevel === "HIGH"
-                            ? "#ef4444"
-                            : riskLevel === "MEDIUM"
-                            ? "#f59e0b"
-                            : "#22c55e"
-                        }
-                        ${probability * 360}deg,
-                        #334155 ${probability * 360}deg
-                      )`,
-                    }}
+                    className={`risk-gauge ${riskLevel.toLowerCase()}`}
                   >
 
-                    <div className="gauge-inner">
+                    <div className="gauge-track">
+                      <div
+                        className="gauge-progress"
+                        style={{
+                          transform: `rotate(${
+                            -135 + risk * 270
+                          }deg)`,
+                        }}
+                      ></div>
+                    </div>
+
+                    <div className="gauge-center">
 
                       <strong>
-                        {Math.round(probability * 100)}%
+                        {Math.round(risk * 100)}%
                       </strong>
 
-                      <span>
-                        {riskLevel}
-                      </span>
+                      <span>SYNTHETIC RISK</span>
 
                     </div>
 
                   </div>
 
-                </div>
+                  <div
+                    className={`risk-pill ${riskLevel.toLowerCase()}`}
+                  >
+                    {riskLevel === "HIGH"
+                      ? "HIGH RISK"
+                      : riskLevel === "MEDIUM"
+                      ? "MODERATE RISK"
+                      : "LOW RISK"}
+                  </div>
 
-              </div>
-
-              {/* ================= SESSION ================= */}
-              <div className="card">
-
-                <p className="card-label">
-                  SESSION
-                </p>
-
-                <div className="session-stat">
-
-                  <span>
-                    Duration
-                  </span>
-
-                  <strong>
-                    {formatTime(sessionTime)}
-                  </strong>
-
-                </div>
-
-                <div className="session-stat">
-
-                  <span>
-                    Microphone
-                  </span>
-
-                  <strong className="active-text">
-                    ● {isListening ? "Active" : "Inactive"}
-                  </strong>
-
-                </div>
-
-                <div className="session-stat">
-
-                  <span>
-                    AI Analysis
-                  </span>
-
-                  <strong className="active-text">
-                    ● {isRecording ? "Running" : "Stopped"}
-                  </strong>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* ================= TIMELINE ================= */}
-            <div className="card timeline-card">
-
-              <div className="timeline-header">
-
-                <p className="card-label">
-                  RISK TIMELINE
-                </p>
-
-                <span>
-                  Live
-                </span>
-
-              </div>
-
-              <div className="timeline">
-
-                {history.length === 0 ? (
-                  <p className="waiting">
-                    Waiting for voice analysis...
+                  <p className="signal-caption">
+                    Signal only — not a certainty
                   </p>
-                ) : (
-                  history.map((value, index) => (
-                    <div
-                      className="timeline-bar"
-                      key={index}
-                      style={{
-                        height: `${Math.max(
-                          value * 100,
-                          8
-                        )}%`,
-                      }}
-                    ></div>
-                  ))
-                )}
+
+                  <div className="call-controls">
+
+                    <button
+                      className="control-button"
+                      title="Mute"
+                    >
+                      ◉
+                    </button>
+
+                    <button
+                      className="control-button end"
+                      onClick={handleStop}
+                      title="Stop protection"
+                    >
+                      ■
+                    </button>
+
+                    <button
+                      className="control-button"
+                      title="Audio"
+                    >
+                      ◫
+                    </button>
+
+                  </div>
+
+                </section>
+
+                {/* ================= RIGHT SIDE ================= */}
+
+                <div className="right-column">
+
+                  {/* VISUALIZER */}
+
+                  <section className="card visualizer-card">
+
+                    <div className="card-header">
+                      <div>
+                        <span>VISUALIZER</span>
+                        <small>
+                          LIVE AUDIO SIGNAL
+                        </small>
+                      </div>
+
+                      <button className="more-button">
+                        •••
+                      </button>
+                    </div>
+
+                    <div className="waveform">
+
+                      {Array.from(
+                        { length: 42 },
+                        (_, index) => (
+                          <span
+                            key={index}
+                            className="wave-bar"
+                            style={{
+                              height: `${
+                                20 +
+                                Math.abs(
+                                  Math.sin(index * 1.7)
+                                ) * 60
+                              }%`,
+                              animationDelay: `${
+                                index * 0.04
+                              }s`,
+                            }}
+                          ></span>
+                        )
+                      )}
+
+                    </div>
+
+                    <div className="visualizer-footer">
+
+                      <span>
+                        <i></i>
+                        AUDIO ANALYZING
+                      </span>
+
+                      <span>
+                        {isRecording
+                          ? "STREAMING"
+                          : "READY"}
+                      </span>
+
+                    </div>
+
+                  </section>
+
+                  {/* TEMPORAL RISK */}
+
+                  <section className="card timeline-card">
+
+                    <div className="card-header">
+
+                      <div>
+                        <span>TEMPORAL RISK SCORE</span>
+
+                        <small>
+                          Risk probability over time
+                        </small>
+                      </div>
+
+                      <span className="timeline-value">
+                        {Math.round(risk * 100)}%
+                      </span>
+
+                    </div>
+
+                    <div className="chart">
+
+                      <div className="chart-y">
+                        <span>100%</span>
+                        <span>75%</span>
+                        <span>50%</span>
+                        <span>25%</span>
+                        <span>0%</span>
+                      </div>
+
+                      <div className="chart-area">
+
+                        <div className="chart-grid"></div>
+
+                        <svg
+                          viewBox="0 0 600 180"
+                          preserveAspectRatio="none"
+                        >
+
+                          <defs>
+                            <linearGradient
+                              id="riskFill"
+                              x1="0"
+                              x2="0"
+                              y1="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="0%"
+                                stopOpacity="0.25"
+                              />
+
+                              <stop
+                                offset="100%"
+                                stopOpacity="0"
+                              />
+                            </linearGradient>
+                          </defs>
+
+                          {riskHistory.length > 1 && (
+                            <>
+                              <polyline
+                                points={riskHistory
+                                  .map(
+                                    (value, index) => {
+                                      const x =
+                                        (index /
+                                          Math.max(
+                                            riskHistory.length -
+                                              1,
+                                            1
+                                          )) *
+                                        580 +
+                                        10;
+
+                                      const y =
+                                        165 -
+                                        value * 140;
+
+                                      return `${x},${y}`;
+                                    }
+                                  )
+                                  .join(" ")}
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+
+                              <polyline
+                                points={`10,165 ${riskHistory
+                                  .map(
+                                    (value, index) => {
+                                      const x =
+                                        (index /
+                                          Math.max(
+                                            riskHistory.length -
+                                              1,
+                                            1
+                                          )) *
+                                        580 +
+                                        10;
+
+                                      const y =
+                                        165 -
+                                        value * 140;
+
+                                      return `${x},${y}`;
+                                    }
+                                  )
+                                  .join(
+                                    " "
+                                  )} 590,165`}
+                                fill="url(#riskFill)"
+                                stroke="none"
+                              />
+                            </>
+                          )}
+
+                        </svg>
+
+                        {riskHistory.length > 0 && (
+                          <div
+                            className="chart-point"
+                            style={{
+                              left: `${
+                                ((riskHistory.length - 1) /
+                                  Math.max(
+                                    riskHistory.length - 1,
+                                    1
+                                  )) *
+                                  100
+                              }%`,
+                              bottom: `${
+                                risk * 100
+                              }%`,
+                            }}
+                          ></div>
+                        )}
+
+                      </div>
+
+                    </div>
+
+                    <div className="chart-x">
+                      <span>0s</span>
+                      <span>15s</span>
+                      <span>30s</span>
+                      <span>45s</span>
+                      <span>60s</span>
+                    </div>
+
+                  </section>
+
+                </div>
 
               </div>
 
-              {/* High risk warning */}
+              {/* HIGH RISK NOTICE */}
+
               {riskLevel === "HIGH" && (
-                <div className="warning-box">
+                <div className="high-risk-notice">
 
-                  ⚠️{" "}
+                  <div className="notice-icon">
+                    !
+                  </div>
 
-                  <strong>
-                    High Risk:
-                  </strong>{" "}
+                  <div>
+                    <strong>
+                      High synthetic voice risk
+                    </strong>
 
-                  Verify caller independently before
-                  sharing sensitive information.
+                    <span>
+                      Verify the caller independently
+                      before sharing sensitive information.
+                    </span>
+                  </div>
 
                 </div>
               )}
 
-            </div>
+              {/* BOTTOM STATUS */}
 
-            {/* Signal disclaimer */}
-            <div className="signal-note">
-              Signal only — verify caller independently.
-            </div>
+              <div className="bottom-status">
 
-          </section>
-        )}
+                <span>
+                  <i></i>
+                  Microphone active
+                </span>
 
-        {/* ================= STOPPED ================= */}
-        {status === "stopped" && (
-          <section className="state-screen">
+                <span>
+                  Audio analyzed live — not stored
+                </span>
 
-            <div className="stopped-icon">
-              ✓
-            </div>
+              </div>
+            </>
+          )}
 
-            <h2>
-              Protection Stopped
-            </h2>
+          {/* ================= STOPPED ================= */}
 
-            <p>
-              Your microphone has been disconnected and the
-              monitoring session has ended.
-            </p>
+          {status === "stopped" && (
+            <section className="stopped-screen">
 
-            <button
-              className="start-button"
-              onClick={handleStart}
-            >
-              🎙️ Start Protection Again
-            </button>
+              <div className="state-icon success">
+                ✓
+              </div>
 
-          </section>
-        )}
+              <div className="eyebrow">
+                SESSION COMPLETE
+              </div>
 
-      </main>
+              <h2>Protection Stopped</h2>
 
-      {/* ================= FOOTER ================= */}
+              <p>
+                Your microphone has been released and the
+                monitoring session has ended.
+              </p>
+
+              <div className="summary-card">
+
+                <div>
+                  <span>SESSION TIME</span>
+                  <strong>
+                    {formatTime(sessionTime)}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>HIGHEST RISK</span>
+                  <strong>
+                    {Math.round(
+                      Math.max(...riskHistory, 0) * 100
+                    )}
+                    %
+                  </strong>
+                </div>
+
+                <div>
+                  <span>SIGNALS</span>
+                  <strong>
+                    {riskHistory.length}
+                  </strong>
+                </div>
+
+              </div>
+
+              <button
+                className="primary-button"
+                onClick={handleReset}
+              >
+                Start Protection Again
+              </button>
+
+            </section>
+          )}
+
+        </main>
+      </div>
+
       <footer className="footer">
-        VoiceGuard • Browser Prototype
+        VoiceGuard · Real-time synthetic voice risk detection
       </footer>
 
     </div>

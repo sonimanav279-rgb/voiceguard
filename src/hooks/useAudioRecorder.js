@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
-import { sendAudioChunk } from "../services/predictionService";
 
-export function useAudioRecorder(onPrediction) {
+export function useAudioRecorder() {
   const recorderRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
 
@@ -21,7 +20,7 @@ export function useAudioRecorder(onPrediction) {
         setIsRecording(true);
       };
 
-      recorder.ondataavailable = async (event) => {
+      recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           console.log(
             "🔊 Audio chunk received:",
@@ -29,21 +28,13 @@ export function useAudioRecorder(onPrediction) {
             "bytes"
           );
 
-          try {
-            const prediction = await sendAudioChunk(event.data);
-
-            console.log("🤖 Mock prediction received:", prediction);
-            if (onPrediction) {
-              onPrediction(prediction);
-}
-          } catch (error) {
-            console.error("❌ Prediction error:", error);
-          }
+          // The audio chunk is intentionally not stored.
+          // A real backend prediction service can be connected here later.
         }
       };
 
       recorder.onerror = (event) => {
-        console.error("❌ Audio recorder error:", event.error);
+        console.error("Audio recorder error:", event.error);
       };
 
       recorder.onstop = () => {
@@ -51,7 +42,6 @@ export function useAudioRecorder(onPrediction) {
         setIsRecording(false);
       };
 
-      // Create a new audio chunk approximately every 1.8 seconds.
       recorder.start(1800);
     } catch (error) {
       console.error("Unable to start audio recorder:", error);
